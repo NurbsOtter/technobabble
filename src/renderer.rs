@@ -11,7 +11,6 @@ use amethyst;
 use amethyst::renderer::VertexPosNormal as Vertex;
 use amethyst::renderer::target::{ColorFormat, DepthFormat};
 use amethyst::renderer::{Frame, Layer};
-use amethyst::renderer::pass::*;
 
 fn build_grid() -> Vec<Vertex> {
     Cube::new()
@@ -61,16 +60,10 @@ impl Renderer {
             }
         ));
         renderer.frame.layers = vec![
-            Layer::new("gbuffer",
-                vec![
-                    Clear::new([0., 0., 0., 1.]),
-                    DrawNoShading::new("main", "main")
-                ]
-            ),
             Layer::new("main",
                 vec![
-                    BlitLayer::new("gbuffer", "ka"),
-                    Lighting::new("main", "gbuffer", "main")
+                    amethyst::renderer::pass::Clear::new([0., 0., 0., 1.]),
+                    amethyst::renderer::pass::DrawShaded::new("main", "main")
                 ]
             )
         ];
@@ -83,10 +76,6 @@ impl Renderer {
         renderer.frame.cameras.insert(
             format!("main"),
             amethyst::renderer::Camera{projection: proj.into(), view: view.mat.into()}
-        );
-        renderer.frame.targets.insert(
-            "gbuffer".into(),
-            Box::new(amethyst::renderer::target::GeometryBuffer::new(&mut renderer.factory, (800, 600)))
         );
         (renderer, window)
     }
