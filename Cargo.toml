@@ -1,0 +1,16 @@
+[package]
+name = "technobabble"
+version = "0.1.0"
+authors = ["Colin Sherratt <colin.sherratt@gmail.com>"]
+
+[dependencies.amethyst]
+git = "https://github.com/amethyst/amethyst"
+branch = "develop"
+
+[dependencies]
+cgmath="0.8"
+gfx="0.11"
+gfx_device_gl="0.10"
+gfx_window_glutin="0.11"
+glutin="0.5"
+genmesh="0.4"
