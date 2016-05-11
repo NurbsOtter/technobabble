@@ -6,6 +6,7 @@ authors = ["Colin Sherratt <colin.sherratt@gmail.com>"]
 [dependencies.amethyst]
 git = "https://github.com/csherratt/amethyst"
 branch = "gfx"
+rev = "800b338"
 
 [dependencies]
 cgmath="0.8"
