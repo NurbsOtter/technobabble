@@ -5,7 +5,7 @@ use gfx_window_glutin;
 use gfx_device_gl;
 use glutin;
 use cgmath::{self, Vector3, Matrix4, EuclideanVector, Transform};
-use genmesh::generators::{Cube};
+use genmesh::generators::Plane;
 use genmesh::{Triangulate, MapToVertices, Vertices};
 use amethyst;
 use amethyst::renderer::VertexPosNormal as Vertex;
@@ -13,10 +13,10 @@ use amethyst::renderer::target::{ColorFormat, DepthFormat};
 use amethyst::renderer::{Frame, Layer};
 
 fn build_grid() -> Vec<Vertex> {
-    Cube::new()
-        .vertex(|(x, y, z)| Vertex{
-            pos: [x*8., y*8., z],
-            normal: Vector3::new(x, y, z).normalize().into()
+    Plane::new()
+        .vertex(|(x, y)| Vertex{
+            pos: [x*8., y*8., 0.],
+            normal: Vector3::new(x, y, 0.).normalize().into()
         })
         .triangulate()
         .vertices()
@@ -67,20 +67,10 @@ impl Renderer {
                 ]
             )
         ];
-        let view = cgmath::AffineMatrix3::look_at(
-            cgmath::Point3::new(10., 10., 10.),
-            cgmath::Point3::new(0., 0., 0.),
-            Vector3::unit_z()
-        );
-        let proj = cgmath::ortho(8., -8., -6., 6., -100., 100.);
-        renderer.frame.cameras.insert(
-            format!("main"),
-            amethyst::renderer::Camera{projection: proj.into(), view: view.mat.into()}
-        );
         (renderer, window)
     }
 
-    pub fn render(&mut self) {
+    pub fn render(&mut self, x: f32, y: f32) {
         let mut scene = amethyst::renderer::Scene::new();
         scene.fragments.push(amethyst::renderer::Fragment{
             buffer: self.grid.clone(),
@@ -97,6 +87,16 @@ impl Renderer {
             propagation_linear: 1.,
             propagation_r_square: 1.,
         });
+        let view = cgmath::AffineMatrix3::look_at(
+            cgmath::Point3::new(x + 1., y + 1., 1.),
+            cgmath::Point3::new(x, y, 0.),
+            Vector3::unit_z()
+        );
+        let proj = cgmath::ortho(-8., 8., -6., 6., -1000., 1000.);
+        self.frame.cameras.insert(
+            format!("main"),
+            amethyst::renderer::Camera{projection: proj.into(), view: view.mat.into()}
+        );
         self.frame.scenes.insert("main".into(), scene);
         self.renderer.submit(&self.frame, &mut self.device);
     }
