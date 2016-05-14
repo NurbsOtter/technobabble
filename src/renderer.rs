@@ -1,10 +1,10 @@
 use gfx;
 use gfx::{Device};
-use gfx::traits::FactoryExt;
+use gfx::traits::{Factory, FactoryExt};
 use gfx_window_glutin;
 use gfx_device_gl;
 use glutin;
-use cgmath::{self, Vector3, Matrix4, EuclideanVector, Transform};
+use cgmath::{self, Vector3, Matrix4, Transform};
 use genmesh::generators::Plane;
 use genmesh::{Triangulate, MapToVertices, Vertices};
 use amethyst;
@@ -13,14 +13,38 @@ use amethyst::renderer::target::{ColorFormat, DepthFormat};
 use amethyst::renderer::{Frame, Layer};
 
 fn build_grid() -> Vec<Vertex> {
-    Plane::new()
+    Plane::subdivide(256, 256)
         .vertex(|(x, y)| Vertex{
-            pos: [x*8., y*8., 0.],
-            normal: Vector3::new(x, y, 0.).normalize().into()
+            pos: [x*16., y*16., 0.],
+            normal: [0., 0., 1.],
+            tex_coord: [0., 0.]
+        })
+        .map(|mut x| {
+            x.x.tex_coord = [0., 0.];
+            x.y.tex_coord = [1., 0.];
+            x.z.tex_coord = [1., 1.];
+            x.w.tex_coord = [0., 1.];
+            x
         })
         .triangulate()
         .vertices()
         .collect()
+}
+
+fn build_texture(x: u16, y: u16) -> Vec<u8> {
+    let mut out = Vec::with_capacity(x as usize * y as usize * 4);
+    for ix in 0..x {
+        for iy in 0..y {
+            let edge = ix == 0 || x == (ix - 1) ||
+                       iy == 0 || y == (iy - 1);
+            let color = if edge { 64 } else { 128 };
+            out.push(color);
+            out.push(color);
+            out.push(color);
+            out.push(255);
+        }
+    }
+    out
 }
 
 pub struct Renderer {
@@ -28,6 +52,7 @@ pub struct Renderer {
     factory: gfx_device_gl::Factory,
     grid: gfx::handle::Buffer<gfx_device_gl::Resources, Vertex>,
     grid_slice: gfx::Slice<gfx_device_gl::Resources>,
+    grid_texture : gfx::handle::ShaderResourceView<gfx_device_gl::Resources, [f32; 4]>,
     renderer: amethyst::renderer::Renderer<gfx_device_gl::Resources, gfx_device_gl::CommandBuffer>,
     frame: amethyst::renderer::Frame<gfx_device_gl::Resources>
 }
@@ -44,12 +69,20 @@ impl Renderer {
         let grid = build_grid();
         let (buffer, slice) = factory.create_vertex_buffer_with_slice(&grid, ());
 
+        let data = build_texture(16, 16);
+        let data = vec![&data[..]];
+        let (_, text) = factory.create_texture_const_u8::<gfx::format::Rgba8>(
+            gfx::tex::Kind::D2(16, 16, gfx::tex::AaMode::Single),
+            &data[..]
+        ).unwrap();
+
         let mut renderer = Renderer {
             device: device,
             factory: factory,
             renderer: renderer,
             grid: buffer,
             grid_slice: slice,
+            grid_texture: text,
             frame: Frame::new()
         };
         renderer.frame.targets.insert(
@@ -75,8 +108,8 @@ impl Renderer {
         scene.fragments.push(amethyst::renderer::Fragment{
             buffer: self.grid.clone(),
             slice: self.grid_slice.clone(),
-            ka: [0.05, 0.05, 0.05, 1.0],
-            kd: [0.5, 0.5, 0.5, 1.0],
+            ka: amethyst::renderer::Texture::Constant([0., 0., 0., 1.]),
+            kd: amethyst::renderer::Texture::Texture(self.grid_texture.clone()),
             transform: Matrix4::from_translation(Vector3::new(0., 0., 0.)).into()
         });
         scene.lights.push(amethyst::renderer::Light{
@@ -84,7 +117,7 @@ impl Renderer {
             radius: 1.,
             center: [4., 0., 4.],
             propagation_constant: 0.,
-            propagation_linear: 1.,
+            propagation_linear: 0.,
             propagation_r_square: 1.,
         });
         let view = cgmath::AffineMatrix3::look_at(
@@ -92,7 +125,7 @@ impl Renderer {
             cgmath::Point3::new(x, y, 0.),
             Vector3::unit_z()
         );
-        let proj = cgmath::ortho(-8., 8., -6., 6., -1000., 1000.);
+        let proj = cgmath::ortho(-4., 4., -3., 3., -1000., 1000.);
         self.frame.cameras.insert(
             format!("main"),
             amethyst::renderer::Camera{projection: proj.into(), view: view.mat.into()}

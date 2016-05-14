@@ -4,9 +4,9 @@ version = "0.1.0"
 authors = ["Colin Sherratt <colin.sherratt@gmail.com>"]
 
 [dependencies.amethyst]
-git = "https://github.com/csherratt/amethyst"
-branch = "gfx"
-rev = "800b338"
+git = "https://github.com/amethyst/amethyst"
+branch = "develop"
+rev = "0635f0a"
 
 [dependencies]
 cgmath="0.8"
