@@ -25,8 +25,8 @@ fn main() {
 
     let (mut renderer, window) = renderer::Renderer::new(builder);
 
-    let (mut x, mut y) = (0., 0.);
-    let (mut dx, mut dy) = (Dir::Zero, Dir::Zero);
+    let (mut x, mut y , mut zm) = (0., 0., 8.);
+    let (mut dx, mut dy, mut dzm) = (Dir::Zero, Dir::Zero, Dir::Zero);
 
     'main: loop {
         for event in window.poll_events() {
@@ -53,7 +53,17 @@ fn main() {
                 glutin::Event::KeyboardInput(Released, _, Some(Key::A)) |
                 glutin::Event::KeyboardInput(Released, _, Some(Key::D)) => {
                     dx = Dir::Zero;
-                }
+                },
+                glutin::Event::KeyboardInput(Pressed, _, Some(Key::Q)) => {
+                    dzm = Dir::Positive;
+                },
+                glutin::Event::KeyboardInput(Pressed, _, Some(Key::Z)) => {
+                    dzm = Dir::Negative;
+                },
+                glutin::Event::KeyboardInput(Released, _, Some(Key::Q)) |
+                glutin::Event::KeyboardInput(Released, _, Some(Key::Z)) => {
+                    dzm = Dir::Zero;
+                },
                 glutin::Event::Resized(_, _) => {
                     renderer.resize(&window);
                 }
@@ -84,8 +94,18 @@ fn main() {
             }
             Dir::Zero => ()
         }
+        
+        match dzm {
+            Dir::Positive => {
+                zm += 0.1;   
+            }
+            Dir::Negative => {
+                zm -= 0.1;    
+            }
+            Dir::Zero => ()
+        }
 
-        renderer.render(x, y);
+        renderer.render(x, y, zm);
         window.swap_buffers().unwrap();
     }
 }

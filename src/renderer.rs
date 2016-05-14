@@ -121,7 +121,8 @@ impl Renderer {
         self.size = (w as f32, h as f32);
     }
 
-    pub fn render(&mut self, x: f32, y: f32) {
+    pub fn render(&mut self, x: f32, y: f32, zm: f32) {
+        self.scale = zm;
         let mut scene = amethyst::renderer::Scene::new();
         scene.fragments.push(amethyst::renderer::Fragment{
             buffer: self.grid.clone(),
