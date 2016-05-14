@@ -97,10 +97,10 @@ fn main() {
         
         match dzm {
             Dir::Positive => {
-                zm += 0.1;   
+                zm -= 0.1;   
             }
             Dir::Negative => {
-                zm -= 0.1;    
+                zm += 0.1;    
             }
             Dir::Zero => ()
         }
