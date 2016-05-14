@@ -54,6 +54,9 @@ fn main() {
                 glutin::Event::KeyboardInput(Released, _, Some(Key::D)) => {
                     dx = Dir::Zero;
                 }
+                glutin::Event::Resized(_, _) => {
+                    renderer.resize(&window);
+                }
                 _ => ()
             }
         }

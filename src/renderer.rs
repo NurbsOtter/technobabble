@@ -37,7 +37,7 @@ fn build_texture(x: u16, y: u16) -> Vec<u8> {
         for iy in 0..y {
             let edge = ix == 0 || x == (ix - 1) ||
                        iy == 0 || y == (iy - 1);
-            let color = if edge { 64 } else { 128 };
+            let color = if edge { 0 } else { 128 };
             out.push(color);
             out.push(color);
             out.push(color);
@@ -54,7 +54,9 @@ pub struct Renderer {
     grid_slice: gfx::Slice<gfx_device_gl::Resources>,
     grid_texture : gfx::handle::ShaderResourceView<gfx_device_gl::Resources, [f32; 4]>,
     renderer: amethyst::renderer::Renderer<gfx_device_gl::Resources, gfx_device_gl::CommandBuffer>,
-    frame: amethyst::renderer::Frame<gfx_device_gl::Resources>
+    frame: amethyst::renderer::Frame<gfx_device_gl::Resources>,
+    size: (f32, f32),
+    scale: f32
 }
 
 impl Renderer {
@@ -83,7 +85,9 @@ impl Renderer {
             grid: buffer,
             grid_slice: slice,
             grid_texture: text,
-            frame: Frame::new()
+            frame: Frame::new(),
+            size: (800., 600.),
+            scale: 5.
         };
         renderer.frame.targets.insert(
             "main".into(),
@@ -103,6 +107,20 @@ impl Renderer {
         (renderer, window)
     }
 
+    pub fn resize(&mut self, window: &glutin::Window) {
+        let output = self.frame.targets.get_mut("main").unwrap();
+        let out = output.downcast_mut::<amethyst::renderer::target::ColorBuffer<gfx_device_gl::Resources>>();
+        let out = out.unwrap();
+        gfx_window_glutin::update_views(
+            window,
+            &mut out.color,
+            &mut out.output_depth
+        );
+
+        let (w, h) = window.get_inner_size_points().unwrap();
+        self.size = (w as f32, h as f32);
+    }
+
     pub fn render(&mut self, x: f32, y: f32) {
         let mut scene = amethyst::renderer::Scene::new();
         scene.fragments.push(amethyst::renderer::Fragment{
@@ -117,15 +135,19 @@ impl Renderer {
             radius: 1.,
             center: [4., 0., 4.],
             propagation_constant: 0.,
-            propagation_linear: 0.,
-            propagation_r_square: 1.,
+            propagation_linear: 1.,
+            propagation_r_square: 0.,
         });
         let view = cgmath::AffineMatrix3::look_at(
             cgmath::Point3::new(x + 1., y + 1., 1.),
             cgmath::Point3::new(x, y, 0.),
             Vector3::unit_z()
         );
-        let proj = cgmath::ortho(-4., 4., -3., 3., -1000., 1000.);
+
+        let angle = (self.size.0 / self.size.1).atan();
+        let w = angle.sin() * self.scale;
+        let h = angle.cos() * self.scale;
+        let proj = cgmath::ortho(-w, w, -h, h, -1000., 1000.);
         self.frame.cameras.insert(
             format!("main"),
             amethyst::renderer::Camera{projection: proj.into(), view: view.mat.into()}
