@@ -4,13 +4,14 @@ use gfx::traits::{Factory, FactoryExt};
 use gfx_window_glutin;
 use gfx_device_gl;
 use glutin;
-use cgmath::{self, Vector3, Matrix4, Transform};
+use cgmath::{Vector3, Matrix4};
 use genmesh::generators::Plane;
 use genmesh::{Triangulate, MapToVertices, Vertices};
 use amethyst;
 use amethyst::renderer::VertexPosNormal as Vertex;
 use amethyst::renderer::target::{ColorFormat, DepthFormat};
 use amethyst::renderer::{Frame, Layer};
+use camera;
 
 fn build_grid() -> Vec<Vertex> {
     Plane::subdivide(256, 256)
@@ -55,8 +56,6 @@ pub struct Renderer {
     grid_texture : gfx::handle::ShaderResourceView<gfx_device_gl::Resources, [f32; 4]>,
     renderer: amethyst::renderer::Renderer<gfx_device_gl::Resources, gfx_device_gl::CommandBuffer>,
     frame: amethyst::renderer::Frame<gfx_device_gl::Resources>,
-    size: (f32, f32),
-    scale: f32
 }
 
 impl Renderer {
@@ -86,8 +85,6 @@ impl Renderer {
             grid_slice: slice,
             grid_texture: text,
             frame: Frame::new(),
-            size: (800., 600.),
-            scale: 5.
         };
         renderer.frame.targets.insert(
             "main".into(),
@@ -116,13 +113,9 @@ impl Renderer {
             &mut out.color,
             &mut out.output_depth
         );
-
-        let (w, h) = window.get_inner_size_points().unwrap();
-        self.size = (w as f32, h as f32);
     }
 
-    pub fn render(&mut self, x: f32, y: f32, zm: f32) {
-        self.scale = zm;
+    pub fn render(&mut self, camera: camera::Camera) {
         let mut scene = amethyst::renderer::Scene::new();
         scene.fragments.push(amethyst::renderer::Fragment{
             buffer: self.grid.clone(),
@@ -139,19 +132,12 @@ impl Renderer {
             propagation_linear: 1.,
             propagation_r_square: 0.,
         });
-        let view = cgmath::AffineMatrix3::look_at(
-            cgmath::Point3::new(x + 1., y + 1., 1.),
-            cgmath::Point3::new(x, y, 0.),
-            Vector3::unit_z()
-        );
-
-        let angle = (self.size.0 / self.size.1).atan();
-        let w = angle.sin() * self.scale;
-        let h = angle.cos() * self.scale;
-        let proj = cgmath::ortho(-w, w, -h, h, -1000., 1000.);
         self.frame.cameras.insert(
             format!("main"),
-            amethyst::renderer::Camera{projection: proj.into(), view: view.mat.into()}
+            amethyst::renderer::Camera{
+                projection: camera.projection().into(),
+                view: camera.view().into()
+            }
         );
         self.frame.scenes.insert("main".into(), scene);
         self.renderer.submit(&self.frame, &mut self.device);

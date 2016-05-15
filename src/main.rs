@@ -7,13 +7,26 @@ extern crate genmesh;
 extern crate amethyst;
 
 mod renderer;
+mod camera;
+
 use glutin::ElementState::{Pressed, Released};
 use glutin::VirtualKeyCode as Key;
+use cgmath::Vector3;
 
 enum Dir {
     Positive,
     Zero,
     Negative
+}
+
+fn clamp(min: f32, value: f32, max: f32) -> f32 {
+    if min > value {
+        min
+    } else if value > max {
+        max
+    } else {
+        value
+    }
 }
 
 fn main() {
@@ -25,7 +38,7 @@ fn main() {
 
     let (mut renderer, window) = renderer::Renderer::new(builder);
 
-    let (mut x, mut y , mut zm) = (0., 0., 8.);
+    let mut camera = camera::Camera::new();
     let (mut dx, mut dy, mut dzm) = (Dir::Zero, Dir::Zero, Dir::Zero);
 
     'main: loop {
@@ -55,10 +68,10 @@ fn main() {
                     dx = Dir::Zero;
                 },
                 glutin::Event::KeyboardInput(Pressed, _, Some(Key::Q)) => {
-                    dzm = Dir::Positive;
+                    dzm = Dir::Negative;
                 },
                 glutin::Event::KeyboardInput(Pressed, _, Some(Key::Z)) => {
-                    dzm = Dir::Negative;
+                    dzm = Dir::Positive;
                 },
                 glutin::Event::KeyboardInput(Released, _, Some(Key::Q)) |
                 glutin::Event::KeyboardInput(Released, _, Some(Key::Z)) => {
@@ -66,46 +79,31 @@ fn main() {
                 },
                 glutin::Event::Resized(_, _) => {
                     renderer.resize(&window);
+                    camera.resize(window.get_inner_size_points().unwrap());
                 }
                 _ => ()
             }
         }
 
-        match dy {
-            Dir::Negative => {
-                x += 0.1;
-                y += 0.1;
-            }
-            Dir::Positive => {
-                x -= 0.1;
-                y -= 0.1;
-            }
-            Dir::Zero => ()
-        }
+        camera.position = camera.position + match dy {
+            Dir::Negative => Vector3::new( 0.1,  0.1, 0.),
+            Dir::Positive => Vector3::new(-0.1, -0.1, 0.),
+            Dir::Zero => Vector3::new(0., 0., 0.),
+        };
+        camera.position = camera.position + match dx {
+            Dir::Negative => Vector3::new( 0.1, -0.1, 0.),
+            Dir::Positive => Vector3::new(-0.1,  0.1, 0.),
+            Dir::Zero => Vector3::new(0., 0., 0.),
+        };
+        camera.position = camera.position + match dzm {
+            Dir::Positive => Vector3::new(0., 0., 0.1),
+            Dir::Negative => Vector3::new(0., 0., -0.1),
+            Dir::Zero => Vector3::new(0., 0., 0.)
+        };
 
-        match dx {
-            Dir::Positive => {
-                x -= 0.1;
-                y += 0.1;
-            }
-            Dir::Negative => {
-                x += 0.1;
-                y -= 0.1;
-            }
-            Dir::Zero => ()
-        }
-        
-        match dzm {
-            Dir::Positive => {
-                zm -= 0.1;   
-            }
-            Dir::Negative => {
-                zm += 0.1;    
-            }
-            Dir::Zero => ()
-        }
+        camera.position.z = clamp(1., camera.position.z, 10.);
 
-        renderer.render(x, y, zm);
+        renderer.render(camera);
         window.swap_buffers().unwrap();
     }
 }
