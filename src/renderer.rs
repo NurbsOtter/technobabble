@@ -4,8 +4,8 @@ use gfx::traits::{Factory, FactoryExt};
 use gfx_window_glutin;
 use gfx_device_gl;
 use glutin;
-use cgmath::{Vector3, Matrix4};
-use genmesh::generators::Plane;
+use cgmath::{Vector3, Matrix4, Point3};
+use genmesh::generators::{Plane, Cube};
 use genmesh::{Triangulate, MapToVertices, Vertices};
 use amethyst;
 use amethyst::renderer::VertexPosNormal as Vertex;
@@ -26,6 +26,18 @@ fn build_grid() -> Vec<Vertex> {
             x.z.tex_coord = [1., 1.];
             x.w.tex_coord = [0., 1.];
             x
+        })
+        .triangulate()
+        .vertices()
+        .collect()
+}
+
+fn build_cube() -> Vec<Vertex> {
+    Cube::new()
+        .vertex(|(x, y, z)| Vertex{
+            pos: [x * 0.125, y * 0.125, z * 0.125],
+            normal: [x, y, z],
+            tex_coord: [0., 0.]
         })
         .triangulate()
         .vertices()
@@ -54,6 +66,8 @@ pub struct Renderer {
     grid: gfx::handle::Buffer<gfx_device_gl::Resources, Vertex>,
     grid_slice: gfx::Slice<gfx_device_gl::Resources>,
     grid_texture : gfx::handle::ShaderResourceView<gfx_device_gl::Resources, [f32; 4]>,
+    cube: gfx::handle::Buffer<gfx_device_gl::Resources, Vertex>,
+    cube_slice: gfx::Slice<gfx_device_gl::Resources>,
     renderer: amethyst::renderer::Renderer<gfx_device_gl::Resources, gfx_device_gl::CommandBuffer>,
     frame: amethyst::renderer::Frame<gfx_device_gl::Resources>,
 }
@@ -70,6 +84,10 @@ impl Renderer {
         let grid = build_grid();
         let (buffer, slice) = factory.create_vertex_buffer_with_slice(&grid, ());
 
+        let cube = build_cube();
+        let (cube_buffer, cube_slice) = factory.create_vertex_buffer_with_slice(&cube, ());
+
+
         let data = build_texture(16, 16);
         let data = vec![&data[..]];
         let (_, text) = factory.create_texture_const_u8::<gfx::format::Rgba8>(
@@ -85,6 +103,8 @@ impl Renderer {
             grid_slice: slice,
             grid_texture: text,
             frame: Frame::new(),
+            cube: cube_buffer,
+            cube_slice: cube_slice
         };
         renderer.frame.targets.insert(
             "main".into(),
@@ -115,7 +135,7 @@ impl Renderer {
         );
     }
 
-    pub fn render(&mut self, camera: camera::Camera) {
+    pub fn render(&mut self, camera: camera::Camera, b: Point3<f32>) {
         let mut scene = amethyst::renderer::Scene::new();
         scene.fragments.push(amethyst::renderer::Fragment{
             buffer: self.grid.clone(),
@@ -123,6 +143,13 @@ impl Renderer {
             ka: amethyst::renderer::Texture::Constant([0., 0., 0., 1.]),
             kd: amethyst::renderer::Texture::Texture(self.grid_texture.clone()),
             transform: Matrix4::from_translation(Vector3::new(0., 0., 0.)).into()
+        });
+        scene.fragments.push(amethyst::renderer::Fragment{
+            buffer: self.cube.clone(),
+            slice: self.cube_slice.clone(),
+            ka: amethyst::renderer::Texture::Constant([0., 0., 0., 1.]),
+            kd: amethyst::renderer::Texture::Constant([1., 0., 0., 1.]),
+            transform: Matrix4::from_translation(Vector3::new(b.x, b.y, b.z)).into()
         });
         scene.lights.push(amethyst::renderer::Light{
             color: [1., 1., 1., 1.],

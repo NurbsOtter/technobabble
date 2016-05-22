@@ -1,4 +1,5 @@
 extern crate cgmath;
+extern crate collision;
 extern crate gfx;
 extern crate gfx_device_gl;
 extern crate gfx_window_glutin;
@@ -11,7 +12,8 @@ mod camera;
 
 use glutin::ElementState::{Pressed, Released};
 use glutin::VirtualKeyCode as Key;
-use cgmath::Vector3;
+use cgmath::{Vector3, Point3};
+use collision::{Plane, Intersect};
 
 enum Dir {
     Positive,
@@ -40,6 +42,7 @@ fn main() {
 
     let mut camera = camera::Camera::new();
     let (mut dx, mut dy, mut dzm) = (Dir::Zero, Dir::Zero, Dir::Zero);
+    let mut mouse = (400, 600);
 
     'main: loop {
         for event in window.poll_events() {
@@ -77,6 +80,9 @@ fn main() {
                 glutin::Event::KeyboardInput(Released, _, Some(Key::Z)) => {
                     dzm = Dir::Zero;
                 },
+                glutin::Event::MouseMoved(x, y) => {
+                    mouse = (x, y);
+                }
                 glutin::Event::Resized(_, _) => {
                     renderer.resize(&window);
                     camera.resize(window.get_inner_size_points().unwrap());
@@ -103,7 +109,12 @@ fn main() {
 
         camera.position.z = clamp(1., camera.position.z, 10.);
 
-        renderer.render(camera);
+        let ray = camera.pixel_ray(mouse);
+        let plane = Plane::from_abcd(0., 0., 1., 0.);
+        println!("{:?} {:?}", ray.origin, ray.direction);
+        if let Some(p) = (plane, ray).intersection() {
+            renderer.render(camera, p);
+        }
         window.swap_buffers().unwrap();
     }
 }

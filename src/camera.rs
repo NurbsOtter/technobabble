@@ -1,4 +1,7 @@
-use cgmath::{Vector3, Point3, Matrix4, ortho, AffineMatrix3, Transform};
+use cgmath::{Vector3, Vector4, Point3, Matrix4, ortho,
+             AffineMatrix3, Transform, SquareMatrix,
+             EuclideanVector};
+use collision::{Ray3, Ray};
 
 #[derive(Copy, Clone)]
 pub struct Camera {
@@ -32,8 +35,36 @@ impl Camera {
         ).mat
     }
 
+    /// Calculate the position of the camera
+    pub fn origin(&self) -> Point3<f32> {
+        self.position
+    }
+
     /// resize the viewport
     pub fn resize(&mut self, (w, h): (u32, u32)) {
         self.viewport_size = (w as f32, h as f32);
+    }
+
+    /// Creates a Ray into the world from the point of view of the camera
+    /// this takes a pixel coordinate and turns it into a ray
+    pub fn pixel_ray(&self, (x, y): (i32, i32)) -> Ray3<f32> {
+        let ray_nds = Vector4::new(
+            2. * x as f32 / self.viewport_size.0 - 1.,
+            1. - 2. * y as f32 / self.viewport_size.1,
+            0.,
+            1.
+        );
+        let ray_clip = Vector4::new(ray_nds.x, ray_nds.y, -1., 1.);
+
+        let iview = self.view().invert().unwrap();
+        let iproj = self.projection().invert().unwrap();
+        let iview_iproj = iview * iproj;
+
+        let nds = iview_iproj *ray_nds;
+        let clip = iview_iproj *ray_clip;
+
+        let ray = (nds - clip).normalize();
+        let origin = Point3::new(nds.x, nds.y, nds.z);
+        Ray::new(origin, Vector3::new(ray.x, ray.y, ray.z))
     }
 }
