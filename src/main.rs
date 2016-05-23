@@ -9,17 +9,14 @@ extern crate amethyst;
 
 mod renderer;
 mod camera;
+mod input;
 
-use glutin::ElementState::{Pressed, Released};
+use glutin::Event;
 use glutin::VirtualKeyCode as Key;
-use cgmath::{Vector3, Point3};
+use cgmath::Vector3;
 use collision::{Plane, Intersect};
 
-enum Dir {
-    Positive,
-    Zero,
-    Negative
-}
+const SCALE: f32 = 0.1;
 
 fn clamp(min: f32, value: f32, max: f32) -> f32 {
     if min > value {
@@ -41,77 +38,48 @@ fn main() {
     let (mut renderer, window) = renderer::Renderer::new(builder);
 
     let mut camera = camera::Camera::new();
-    let (mut dx, mut dy, mut dzm) = (Dir::Zero, Dir::Zero, Dir::Zero);
-    let mut mouse = (400, 600);
+    let mut input = input::Events::new(&window);
+    while input.running {
+        input.next_frame(&window);
 
-    'main: loop {
-        for event in window.poll_events() {
-            match event {
-                glutin::Event::Closed => {
-                    break 'main;
-                },
-                glutin::Event::KeyboardInput(Pressed, _, Some(Key::W)) => {
-                    dy = Dir::Positive;
-                },
-                glutin::Event::KeyboardInput(Pressed, _, Some(Key::S)) => {
-                    dy = Dir::Negative;
-                },
-                glutin::Event::KeyboardInput(Released, _, Some(Key::W)) |
-                glutin::Event::KeyboardInput(Released, _, Some(Key::S)) => {
-                    dy = Dir::Zero;
-                },
-                glutin::Event::KeyboardInput(Pressed, _, Some(Key::D)) => {
-                    dx = Dir::Positive;
-                },
-                glutin::Event::KeyboardInput(Pressed, _, Some(Key::A)) => {
-                    dx = Dir::Negative;
-                },
-                glutin::Event::KeyboardInput(Released, _, Some(Key::A)) |
-                glutin::Event::KeyboardInput(Released, _, Some(Key::D)) => {
-                    dx = Dir::Zero;
-                },
-                glutin::Event::KeyboardInput(Pressed, _, Some(Key::Q)) => {
-                    dzm = Dir::Negative;
-                },
-                glutin::Event::KeyboardInput(Pressed, _, Some(Key::Z)) => {
-                    dzm = Dir::Positive;
-                },
-                glutin::Event::KeyboardInput(Released, _, Some(Key::Q)) |
-                glutin::Event::KeyboardInput(Released, _, Some(Key::Z)) => {
-                    dzm = Dir::Zero;
-                },
-                glutin::Event::MouseMoved(x, y) => {
-                    mouse = (x, y);
+        camera.position = camera.position + match (input.is_key_down(Key::A), input.is_key_down(Key::D)) {
+            (true, false) => Vector3::new(1.0, -1.0, 0.),
+            (false, true) => Vector3::new(-1.0, 1.0, 0.),
+            _ => Vector3::new(0., 0., 0.)
+        } * SCALE;
+        camera.position = camera.position + match (input.is_key_down(Key::S), input.is_key_down(Key::W)) {
+            (true, false) => Vector3::new(1.0, 1.0, 0.),
+            (false, true) => Vector3::new(-1.0, -1.0, 0.),
+            _ => Vector3::new(0., 0., 0.)
+        } * SCALE;
+        camera.position = camera.position + match (input.is_key_down(Key::Equals), input.is_key_down(Key::Subtract)) {
+            (true, false) => Vector3::new(0., 0., -1.),
+            (false, true) => Vector3::new(0., 0., 1.),
+            _ => Vector3::new(0., 0., 0.)
+        } * SCALE;
+
+        for e in &input.events {
+            use glutin::MouseScrollDelta;
+            match e {
+                &Event::MouseWheel(MouseScrollDelta::LineDelta(_, x), _) => {
+                    camera.position.z -= 2. * x * SCALE;
                 }
-                glutin::Event::Resized(_, _) => {
-                    renderer.resize(&window);
-                    camera.resize(window.get_inner_size_points().unwrap());
+                &Event::MouseWheel(MouseScrollDelta::PixelDelta(_, x), _) => {
+                    camera.position.z -= 2. * x * SCALE * 10.;
                 }
                 _ => ()
             }
         }
 
-        camera.position = camera.position + match dy {
-            Dir::Negative => Vector3::new( 0.1,  0.1, 0.),
-            Dir::Positive => Vector3::new(-0.1, -0.1, 0.),
-            Dir::Zero => Vector3::new(0., 0., 0.),
-        };
-        camera.position = camera.position + match dx {
-            Dir::Negative => Vector3::new( 0.1, -0.1, 0.),
-            Dir::Positive => Vector3::new(-0.1,  0.1, 0.),
-            Dir::Zero => Vector3::new(0., 0., 0.),
-        };
-        camera.position = camera.position + match dzm {
-            Dir::Positive => Vector3::new(0., 0., 0.1),
-            Dir::Negative => Vector3::new(0., 0., -0.1),
-            Dir::Zero => Vector3::new(0., 0., 0.)
-        };
-
         camera.position.z = clamp(1., camera.position.z, 10.);
 
-        let ray = camera.pixel_ray(mouse);
+
+        camera.resize(input.window_size);
+        renderer.resize(&window);
+
+
+        let ray = camera.pixel_ray(input.mouse_position);
         let plane = Plane::from_abcd(0., 0., 1., 0.);
-        println!("{:?} {:?}", ray.origin, ray.direction);
         if let Some(p) = (plane, ray).intersection() {
             renderer.render(camera, p);
         }
