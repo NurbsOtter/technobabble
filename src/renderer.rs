@@ -4,14 +4,17 @@ use gfx::traits::{Factory, FactoryExt};
 use gfx_window_glutin;
 use gfx_device_gl;
 use glutin;
-use cgmath::{Vector3, Matrix4, Point3};
+use cgmath::{Vector3, Matrix4};
 use genmesh::generators::{Plane, Cube};
 use genmesh::{Triangulate, MapToVertices, Vertices};
 use amethyst;
 use amethyst::renderer::VertexPosNormal as Vertex;
 use amethyst::renderer::target::{ColorFormat, DepthFormat};
 use amethyst::renderer::{Frame, Layer};
+use ecs::{self, Join};
+
 use camera;
+use transform::Transform;
 
 fn build_grid() -> Vec<Vertex> {
     Plane::subdivide(256, 256)
@@ -62,7 +65,7 @@ fn build_texture(x: u16, y: u16) -> Vec<u8> {
 
 pub struct Renderer {
     device: gfx_device_gl::Device,
-    factory: gfx_device_gl::Factory,
+    _factory: gfx_device_gl::Factory,
     grid: gfx::handle::Buffer<gfx_device_gl::Resources, Vertex>,
     grid_slice: gfx::Slice<gfx_device_gl::Resources>,
     grid_texture : gfx::handle::ShaderResourceView<gfx_device_gl::Resources, [f32; 4]>,
@@ -97,7 +100,7 @@ impl Renderer {
 
         let mut renderer = Renderer {
             device: device,
-            factory: factory,
+            _factory: factory,
             renderer: renderer,
             grid: buffer,
             grid_slice: slice,
@@ -135,7 +138,7 @@ impl Renderer {
         );
     }
 
-    pub fn render(&mut self, camera: camera::Camera, b: Point3<f32>) {
+    pub fn render(&mut self, camera: camera::Camera, world: &ecs::World) {
         let mut scene = amethyst::renderer::Scene::new();
         scene.fragments.push(amethyst::renderer::Fragment{
             buffer: self.grid.clone(),
@@ -144,13 +147,25 @@ impl Renderer {
             kd: amethyst::renderer::Texture::Texture(self.grid_texture.clone()),
             transform: Matrix4::from_translation(Vector3::new(0., 0., 0.)).into()
         });
-        scene.fragments.push(amethyst::renderer::Fragment{
+
+        let transform = world.read::<Transform>();
+        for (t, ) in (&transform,).iter() {
+            scene.fragments.push(amethyst::renderer::Fragment{
+                buffer: self.cube.clone(),
+                slice: self.cube_slice.clone(),
+                ka: amethyst::renderer::Texture::Constant([0., 0., 0., 1.]),
+                kd: amethyst::renderer::Texture::Constant([1., 0., 0., 1.]),
+            transform: t.model_matrix().into(),
+            })
+        }
+
+        /*scene.fragments.push(amethyst::renderer::Fragment{
             buffer: self.cube.clone(),
             slice: self.cube_slice.clone(),
             ka: amethyst::renderer::Texture::Constant([0., 0., 0., 1.]),
             kd: amethyst::renderer::Texture::Constant([1., 0., 0., 1.]),
             transform: Matrix4::from_translation(Vector3::new(b.x, b.y, b.z)).into()
-        });
+        });*/
         scene.lights.push(amethyst::renderer::Light{
             color: [1., 1., 1., 1.],
             radius: 1.,

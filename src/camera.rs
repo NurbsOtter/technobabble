@@ -35,11 +35,6 @@ impl Camera {
         ).mat
     }
 
-    /// Calculate the position of the camera
-    pub fn origin(&self) -> Point3<f32> {
-        self.position
-    }
-
     /// resize the viewport
     pub fn resize(&mut self, (w, h): (u32, u32)) {
         self.viewport_size = (w as f32, h as f32);

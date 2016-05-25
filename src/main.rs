@@ -39,7 +39,6 @@ fn step(world: &ecs::World, window: &glutin::Window) -> bool {
 fn main() {
     let mut world = ecs::World::new();
     world.register::<transform::Transform>();
-    world.register::<input::Events>();
 
     let builder = glutin::WindowBuilder::new()
         .with_title("Technobabble".to_string())
@@ -51,27 +50,22 @@ fn main() {
     world.add_resource(camera::Camera::new());
 
     let mut sim = ecs::Planner::<()>::new(world, 4);
-    sim.add_system(CameraListener, "Camera Listener", 10);
+    sim.add_system(InputHandler, "Input Handler", 10);
+    sim.add_system(CreateBox, "CreateBox", 20);
 
     while step(&sim.world, &window) {
         sim.dispatch(());
 
-        let input = sim.world.read_resource::<input::Events>();
         let camera = sim.world.read_resource::<camera::Camera>();
-
-        let ray = camera.pixel_ray(input.mouse_position);
-        let plane = Plane::from_abcd(0., 0., 1., 0.);
-        if let Some(p) = (plane, ray).intersection() {
-            renderer.resize(&window);
-            renderer.render(*camera, p);
-        }
+        renderer.resize(&window);
+        renderer.render(*camera, &sim.world);
         window.swap_buffers().unwrap();
     }
 }
 
-struct CameraListener;
+struct InputHandler;
 
-impl ecs::System<()> for CameraListener{
+impl ecs::System<()> for InputHandler {
     fn run(&mut self, arg: ecs::RunArg, _: ()) {
         let (mut camera, input) = arg.fetch(|w| {
             (w.write_resource::<camera::Camera>(), w.read_resource::<input::Events>())
@@ -108,5 +102,28 @@ impl ecs::System<()> for CameraListener{
 
         camera.position.z = clamp(1., camera.position.z, 10.);
         camera.resize(input.window_size);
+    }
+}
+
+struct CreateBox;
+
+impl ecs::System<()> for CreateBox {
+    fn run(&mut self, arg: ecs::RunArg, _: ()) {
+        let (camera, input, mut trans) = arg.fetch(|w| {
+            (w.read_resource::<camera::Camera>(),
+             w.read_resource::<input::Events>(),
+             w.write::<transform::Transform>())
+        });
+
+        if input.is_button_down(glutin::MouseButton::Left) {
+            let ray = camera.pixel_ray(input.mouse_position);
+            let plane = Plane::from_abcd(0., 0., 1., 0.);
+            if let Some(p) = (plane, ray).intersection() {
+                let eid = arg.create();
+                trans.insert(eid, transform::Transform{
+                    translate: Vector3::new(p.x, p.y, p.z)
+                });
+            }
+        }
     }
 }
