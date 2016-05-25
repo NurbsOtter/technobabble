@@ -2,6 +2,7 @@
 use std::collections::HashSet;
 use glutin::{Event, Window, MouseButton, VirtualKeyCode};
 use glutin::ElementState::{Pressed, Released};
+use ecs;
 
 #[derive(Clone, Debug)]
 pub struct Events {
@@ -33,6 +34,7 @@ impl Events {
 
     pub fn next_frame(&mut self, window: &Window) {
         self.events.clear();
+
         for e in window.poll_events() {
             match e {
                 Event::Closed => self.running = false,
@@ -58,5 +60,41 @@ impl Events {
 
     pub fn is_key_down(&self, key: VirtualKeyCode) -> bool {
         self.key_down.contains(&key)
+    }
+}
+
+impl ecs::Component for Events {
+    type Storage = Events;
+}
+
+/// This is a hack to allow the Events to be shared as part of the ECS's
+/// storage pool
+impl ecs::UnprotectedStorage<Events> for Events {
+    fn new() -> Events {
+        Events {
+            window_size: (0, 0),
+            mouse_position: (0, 0),
+            events: vec![],
+            key_down: HashSet::new(),
+            button_down: HashSet::new(),
+            running: true
+        }
+    }
+    unsafe fn get(&self, _: ecs::Index) -> &Events {
+        panic!("events it not indented to be used as storage");
+    }
+    unsafe fn get_mut(&mut self, _: ecs::Index) -> &mut Events {
+        panic!("events it not indented to be used as storage");
+    }
+    unsafe fn insert(&mut self, _: ecs::Index, _: Events) {
+        panic!("events it not indented to be used as storage");
+    }
+    unsafe fn remove(&mut self, _: ecs::Index) -> Events {
+        panic!("events it not indented to be used as storage");
+    }
+    unsafe fn clean<F>(&mut self, _: F)
+        where F: Fn(ecs::Index) -> bool
+    {
+        panic!("events it not indented to be used as storage");
     }
 }

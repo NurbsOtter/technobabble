@@ -6,10 +6,12 @@ extern crate gfx_window_glutin;
 extern crate glutin;
 extern crate genmesh;
 extern crate amethyst;
+extern crate specs as ecs;
 
 mod renderer;
 mod camera;
 mod input;
+mod transform;
 
 use glutin::Event;
 use glutin::VirtualKeyCode as Key;
@@ -28,19 +30,52 @@ fn clamp(min: f32, value: f32, max: f32) -> f32 {
     }
 }
 
+fn step(world: &ecs::World, window: &glutin::Window) -> bool {
+    let mut input = world.write_resource::<input::Events>();
+    input.next_frame(window);
+    input.running
+}
+
 fn main() {
+    let mut world = ecs::World::new();
+    world.register::<transform::Transform>();
+    world.register::<input::Events>();
+
     let builder = glutin::WindowBuilder::new()
         .with_title("Technobabble".to_string())
         .with_dimensions(800, 600)
         .with_vsync();
 
-
     let (mut renderer, window) = renderer::Renderer::new(builder);
+    world.add_resource(input::Events::new(&window));
+    world.add_resource(camera::Camera::new());
 
-    let mut camera = camera::Camera::new();
-    let mut input = input::Events::new(&window);
-    while input.running {
-        input.next_frame(&window);
+    let mut sim = ecs::Planner::<()>::new(world, 4);
+    sim.add_system(CameraListener, "Camera Listener", 10);
+
+    while step(&sim.world, &window) {
+        sim.dispatch(());
+
+        let input = sim.world.read_resource::<input::Events>();
+        let camera = sim.world.read_resource::<camera::Camera>();
+
+        let ray = camera.pixel_ray(input.mouse_position);
+        let plane = Plane::from_abcd(0., 0., 1., 0.);
+        if let Some(p) = (plane, ray).intersection() {
+            renderer.resize(&window);
+            renderer.render(*camera, p);
+        }
+        window.swap_buffers().unwrap();
+    }
+}
+
+struct CameraListener;
+
+impl ecs::System<()> for CameraListener{
+    fn run(&mut self, arg: ecs::RunArg, _: ()) {
+        let (mut camera, input) = arg.fetch(|w| {
+            (w.write_resource::<camera::Camera>(), w.read_resource::<input::Events>())
+        });
 
         camera.position = camera.position + match (input.is_key_down(Key::A), input.is_key_down(Key::D)) {
             (true, false) => Vector3::new(1.0, -1.0, 0.),
@@ -72,17 +107,6 @@ fn main() {
         }
 
         camera.position.z = clamp(1., camera.position.z, 10.);
-
-
         camera.resize(input.window_size);
-        renderer.resize(&window);
-
-
-        let ray = camera.pixel_ray(input.mouse_position);
-        let plane = Plane::from_abcd(0., 0., 1., 0.);
-        if let Some(p) = (plane, ray).intersection() {
-            renderer.render(camera, p);
-        }
-        window.swap_buffers().unwrap();
     }
 }
