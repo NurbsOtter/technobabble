@@ -7,19 +7,19 @@ extern crate glutin;
 extern crate genmesh;
 extern crate amethyst;
 extern crate specs as ecs;
+extern crate rtree;
 
 mod renderer;
 mod camera;
 mod input;
 mod transform;
-mod grid;
 
 use glutin::Event;
 use glutin::VirtualKeyCode as Key;
 use cgmath::Vector3;
 use collision::{Plane, Intersect};
+use rtree::{RTree, Rectangle, Point};
 
-use grid::Grid;
 
 const SCALE: f32 = 0.1;
 
@@ -51,7 +51,7 @@ fn main() {
     let (mut renderer, window) = renderer::Renderer::new(builder);
     world.add_resource(input::Events::new(&window));
     world.add_resource(camera::Camera::new());
-    world.add_resource(Grid::<ecs::Entity>::new());
+    world.add_resource(RTree::<ecs::Entity>::new());
 
     let mut sim = ecs::Planner::<()>::new(world, 4);
     sim.add_system(InputHandler, "Input Handler", 10);
@@ -116,7 +116,7 @@ impl ecs::System<()> for CreateBox {
         let (camera, input, mut grid, mut trans) = arg.fetch(|w| {
             (w.read_resource::<camera::Camera>(),
              w.read_resource::<input::Events>(),
-             w.write_resource::<Grid<ecs::Entity>>(),
+             w.write_resource::<RTree<ecs::Entity>>(),
              w.write::<transform::Transform>())
         });
 
@@ -124,23 +124,23 @@ impl ecs::System<()> for CreateBox {
             let ray = camera.pixel_ray(input.mouse_position);
             let plane = Plane::from_abcd(0., 0., 1., 0.);
             if let Some(p) = (plane, ray).intersection() {
-                let x = (p.x * 8.).round() as i32;
-                let y = (p.y * 8.).round() as i32;
+                let x = (p.x * 8.).round() as i16;
+                let y = (p.y * 8.).round() as i16;
 
-                let rect = grid::Rectangle{
-                    x: x,
-                    y: y,
-                    width: 2,
-                    height: 2
+                let rect = Rectangle{
+                    min: Point{x: x, y: y},
+                    max: Point{x: x+2, y: y+2},
                 };
 
                 // check to see if we can!
-                if grid.intersects(rect).next().is_some() {
-                    return
+                for (&other, _) in grid.query(rect) {
+                    if rect.overlaps(other) {
+                        return
+                    }
                 }
 
                 let eid = arg.create();
-                grid.insert(rect, eid);
+                grid.extend(Some((rect, eid)));
 
                 trans.insert(eid, transform::Transform{
                     translate: Vector3::new(x as f32 / 8., y as f32 / 8., p.z)
