@@ -38,7 +38,7 @@ fn build_grid() -> Vec<Vertex> {
 fn build_cube() -> Vec<Vertex> {
     Cube::new()
         .vertex(|(x, y, z)| Vertex{
-            pos: [x * 0.125, y * 0.125, z * 0.125],
+            pos: [x * 0.0625, y * 0.0625, z * 0.125 + 0.125],
             normal: [x, y, z],
             tex_coord: [0., 0.]
         })

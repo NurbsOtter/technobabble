@@ -129,7 +129,7 @@ impl ecs::System<()> for CreateBox {
 
                 let rect = Rectangle{
                     min: Point{x: x, y: y},
-                    max: Point{x: x+2, y: y+2},
+                    max: Point{x: x+1, y: y+1},
                 };
 
                 // check to see if we can!
