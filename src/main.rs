@@ -98,7 +98,7 @@ impl ecs::System<()> for InputHandler {
                     camera.position.z -= 2. * x * SCALE;
                 }
                 &Event::MouseWheel(MouseScrollDelta::PixelDelta(_, x), _) => {
-                    camera.position.z -= 2. * x * SCALE * 10.;
+                    camera.position.z -= 2. * x * SCALE / 10.;
                 }
                 _ => ()
             }
