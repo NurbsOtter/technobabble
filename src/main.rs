@@ -42,6 +42,7 @@ fn step(world: &ecs::World, window: &glutin::Window) -> bool {
 fn main() {
     let mut world = ecs::World::new();
     world.register::<transform::Transform>();
+    world.register::<PreviewMarker>();
 
     let builder = glutin::WindowBuilder::new()
         .with_title("Technobabble".to_string())
@@ -53,9 +54,13 @@ fn main() {
     world.add_resource(camera::Camera::new());
     world.add_resource(RTree::<ecs::Entity>::new());
 
+    let eid = world.create_now().with(PreviewMarker).build();
+
     let mut sim = ecs::Planner::<()>::new(world, 4);
     sim.add_system(InputHandler, "Input Handler", 10);
-    sim.add_system(CreateBox, "CreateBox", 20);
+    sim.add_system(CreateBox{
+        preview: eid
+    }, "CreateBox", 20);
 
     while step(&sim.world, &window) {
         sim.dispatch(());
@@ -109,7 +114,15 @@ impl ecs::System<()> for InputHandler {
     }
 }
 
-struct CreateBox;
+#[derive(Clone, Default)]
+pub struct PreviewMarker;
+impl ecs::Component for PreviewMarker {
+    type Storage = ecs::NullStorage<PreviewMarker>;
+}
+
+struct CreateBox{
+    preview: ecs::Entity
+}
 
 impl ecs::System<()> for CreateBox {
     fn run(&mut self, arg: ecs::RunArg, _: ()) {
@@ -120,32 +133,44 @@ impl ecs::System<()> for CreateBox {
              w.write::<transform::Transform>())
         });
 
-        if input.is_button_down(glutin::MouseButton::Left) {
-            let ray = camera.pixel_ray(input.mouse_position);
-            let plane = Plane::from_abcd(0., 0., 1., 0.);
-            if let Some(p) = (plane, ray).intersection() {
-                let x = (p.x * 8.).round() as i16;
-                let y = (p.y * 8.).round() as i16;
 
-                let rect = Rectangle{
-                    min: Point{x: x, y: y},
-                    max: Point{x: x+1, y: y+1},
-                };
+        let ray = camera.pixel_ray(input.mouse_position);
+        let plane = Plane::from_abcd(0., 0., 1., 0.);
+        if let Some(p) = (plane, ray).intersection() {
+            let x = (p.x * 8.).round() as i16;
+            let y = (p.y * 8.).round() as i16;
 
-                // check to see if we can!
-                for (&other, _) in grid.query(rect) {
-                    if rect.overlaps(other) {
-                        return
-                    }
+            let rect = Rectangle{
+                min: Point{x: x, y: y},
+                max: Point{x: x+1, y: y+1},
+            };
+
+            // check to see if we can!
+            for (&other, _) in grid.query(rect) {
+                if rect.overlaps(other) {
+                    return
                 }
+            }
 
+            if input.is_button_down(glutin::MouseButton::Left) {
                 let eid = arg.create();
                 grid.extend(Some((rect, eid)));
 
                 trans.insert(eid, transform::Transform{
-                    translate: Vector3::new(x as f32 / 8., y as f32 / 8., p.z)
+                    translate: Vector3::new(
+                        x as f32 / 8. + 1. / 16.,
+                        y as f32 / 8. + 1. / 16.,
+                        p.z
+                    )
                 });
             }
+            trans.insert(self.preview, transform::Transform{
+                translate: Vector3::new(
+                    x as f32 / 8. + 1. / 16.,
+                    y as f32 / 8. + 1. / 16.,
+                    p.z
+                )
+            });
         }
     }
 }

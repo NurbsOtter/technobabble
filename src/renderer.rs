@@ -15,6 +15,7 @@ use ecs::{self, Join};
 
 use camera;
 use transform::Transform;
+use PreviewMarker;
 
 fn build_grid() -> Vec<Vertex> {
     Plane::subdivide(256, 256)
@@ -149,12 +150,24 @@ impl Renderer {
         });
 
         let transform = world.read::<Transform>();
-        for (t, ) in (&transform,).iter() {
+        let preview = world.read::<PreviewMarker>();
+
+        for (t, _) in (&transform, !&preview).iter() {
             scene.fragments.push(amethyst::renderer::Fragment{
                 buffer: self.cube.clone(),
                 slice: self.cube_slice.clone(),
                 ka: amethyst::renderer::Texture::Constant([0., 0., 0., 1.]),
                 kd: amethyst::renderer::Texture::Constant([1., 0., 0., 1.]),
+            transform: t.model_matrix().into(),
+            })
+        }
+
+        for (t, _) in (&transform, &preview).iter() {
+            scene.fragments.push(amethyst::renderer::Fragment{
+                buffer: self.cube.clone(),
+                slice: self.cube_slice.clone(),
+                ka: amethyst::renderer::Texture::Constant([0., 0., 0., 1.]),
+                kd: amethyst::renderer::Texture::Constant([0., 1., 0., 1.]),
             transform: t.model_matrix().into(),
             })
         }
