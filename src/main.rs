@@ -123,7 +123,7 @@ impl ecs::System<()> for InputHandler {
         camera.position.z = clamp(1., camera.position.z, 10.);
         camera.resize(input.window_size);
 
-        let rate = if input.is_key_down(Key::LShift) { 0.25 } else { 0.1 };
+        let rate = if input.is_key_down(Key::LShift) { 0.55 } else { 0.20 };
         let left_right: movement::Vector = match (input.is_key_down(Key::A), input.is_key_down(Key::D)) {
             (true, false) => (rate, -rate).into(),
             (false, true) => (-rate, rate).into(),

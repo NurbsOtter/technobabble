@@ -8,8 +8,8 @@ const MIN: Q8p24 = Q8p24(std::i32::MIN);
 use std::fmt::{self, Formatter, Debug};
 
 /// a int with 8 bits and 24 fixed point
-#[derive(Copy, Clone)]
-pub struct Q8p24(i32);
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Q8p24(pub i32);
 
 impl Q8p24 {
     /// get the value without the fractional bits

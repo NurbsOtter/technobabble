@@ -33,7 +33,12 @@ impl Movement {
         let rem = sum.trunc();
         self.remainder = sum.fract();
 
-        println!("{:?} {:?}", rem, self.remainder);
+        if self.vector.x == q8p24::Q8p24(0) {
+            self.remainder.x = (0.).into();
+        }
+        if self.vector.y == q8p24::Q8p24(0) {
+            self.remainder.y = (0.).into();
+        }
 
         let (x, y): (i8, i8) = (rem.x.into(), rem.y.into());
         pos.min.x = pos.min.x + x as i16;
