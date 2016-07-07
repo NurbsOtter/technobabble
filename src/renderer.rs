@@ -91,7 +91,6 @@ impl Renderer {
         let cube = build_cube();
         let (cube_buffer, cube_slice) = factory.create_vertex_buffer_with_slice(&cube, ());
 
-
         let data = build_texture(16, 16);
         let data = vec![&data[..]];
         let (_, text) = factory.create_texture_const_u8::<gfx::format::Rgba8>(
@@ -158,7 +157,7 @@ impl Renderer {
                 slice: self.cube_slice.clone(),
                 ka: amethyst::renderer::Texture::Constant([0., 0., 0., 1.]),
                 kd: amethyst::renderer::Texture::Constant([1., 0., 0., 1.]),
-            transform: t.model_matrix().into(),
+                transform: t.model_matrix().into(),
             })
         }
 
@@ -168,7 +167,7 @@ impl Renderer {
                 slice: self.cube_slice.clone(),
                 ka: amethyst::renderer::Texture::Constant([0., 0., 0., 1.]),
                 kd: amethyst::renderer::Texture::Constant([0., 1., 0., 1.]),
-            transform: t.model_matrix().into(),
+                transform: t.model_matrix().into(),
             })
         }
 

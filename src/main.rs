@@ -7,12 +7,16 @@ extern crate glutin;
 extern crate genmesh;
 extern crate amethyst;
 extern crate specs as ecs;
-extern crate rtree;
+
+#[cfg(test)]
+extern crate quickcheck;
 
 mod renderer;
 mod camera;
 mod input;
 mod transform;
+mod movement;
+mod rtree;
 
 use glutin::Event;
 use glutin::VirtualKeyCode as Key;
@@ -39,28 +43,42 @@ fn step(world: &ecs::World, window: &glutin::Window) -> bool {
     input.running
 }
 
+struct Player(ecs::Entity);
+
 fn main() {
     let mut world = ecs::World::new();
     world.register::<transform::Transform>();
     world.register::<PreviewMarker>();
+    world.register::<movement::Movement>();
 
     let builder = glutin::WindowBuilder::new()
         .with_title("Technobabble".to_string())
         .with_dimensions(800, 600)
         .with_vsync();
 
+    let eid = world.create_now()
+                   .with(PreviewMarker)
+                   .with(movement::Movement::new(0., 0.))
+                   .with(transform::Transform{
+                        rectangle: rtree::Rectangle{
+                            min: Point{x: -1, y: -1},
+                            max: Point{x:  1, y:  1}
+                        },
+                        z: 0.,
+                   })
+                   .build();
+
     let (mut renderer, window) = renderer::Renderer::new(builder);
     world.add_resource(input::Events::new(&window));
     world.add_resource(camera::Camera::new());
     world.add_resource(RTree::<ecs::Entity>::new());
-
-    let eid = world.create_now().with(PreviewMarker).build();
+    world.add_resource(Player(eid));
 
     let mut sim = ecs::Planner::<()>::new(world, 4);
-    sim.add_system(InputHandler, "Input Handler", 10);
-    sim.add_system(CreateBox{
-        preview: eid
-    }, "CreateBox", 20);
+    sim.add_system(InputHandler, "Input Handler", 16);
+    sim.add_system(CreateBox, "Create box", 15);
+    sim.add_system(movement::System, "movement", 14);
+    sim.add_system(CameraSystem, "Camera System", 13);
 
     while step(&sim.world, &window) {
         sim.dispatch(());
@@ -76,20 +94,13 @@ struct InputHandler;
 
 impl ecs::System<()> for InputHandler {
     fn run(&mut self, arg: ecs::RunArg, _: ()) {
-        let (mut camera, input) = arg.fetch(|w| {
-            (w.write_resource::<camera::Camera>(), w.read_resource::<input::Events>())
+        let (mut camera, input, player, mut mov) = arg.fetch(|w| {
+            (w.write_resource::<camera::Camera>(),
+             w.read_resource::<input::Events>(),
+             w.read_resource::<Player>(),
+             w.write::<movement::Movement>())
         });
 
-        camera.position = camera.position + match (input.is_key_down(Key::A), input.is_key_down(Key::D)) {
-            (true, false) => Vector3::new(1.0, -1.0, 0.),
-            (false, true) => Vector3::new(-1.0, 1.0, 0.),
-            _ => Vector3::new(0., 0., 0.)
-        } * SCALE;
-        camera.position = camera.position + match (input.is_key_down(Key::S), input.is_key_down(Key::W)) {
-            (true, false) => Vector3::new(1.0, 1.0, 0.),
-            (false, true) => Vector3::new(-1.0, -1.0, 0.),
-            _ => Vector3::new(0., 0., 0.)
-        } * SCALE;
         camera.position = camera.position + match (input.is_key_down(Key::Equals), input.is_key_down(Key::Subtract)) {
             (true, false) => Vector3::new(0., 0., -1.),
             (false, true) => Vector3::new(0., 0., 1.),
@@ -111,6 +122,38 @@ impl ecs::System<()> for InputHandler {
 
         camera.position.z = clamp(1., camera.position.z, 10.);
         camera.resize(input.window_size);
+
+        let rate = if input.is_key_down(Key::LShift) { 0.25 } else { 0.1 };
+        let left_right: movement::Vector = match (input.is_key_down(Key::A), input.is_key_down(Key::D)) {
+            (true, false) => (rate, -rate).into(),
+            (false, true) => (-rate, rate).into(),
+            _ => (0., 0.).into()
+        };
+        let up_down: movement::Vector = match (input.is_key_down(Key::S), input.is_key_down(Key::W)) {
+            (true, false) => (rate, rate).into(),
+            (false, true) => (-rate, -rate).into(),
+            _ => (0., 0.).into()
+        };
+
+        let movement = mov.get_mut(player.0).unwrap();
+        movement.vector = left_right + up_down;
+    }
+}
+
+struct CameraSystem;
+
+impl ecs::System<()> for CameraSystem {
+    fn run(&mut self, arg: ecs::RunArg, _: ()) {
+        let (mut camera, player, transform) = arg.fetch(|w| {
+            (w.write_resource::<camera::Camera>(),
+             w.read_resource::<Player>(),
+             w.read::<transform::Transform>())
+        });
+
+        let transform = transform.get(player.0).unwrap();
+        let (x, y) = transform.middle();
+        camera.position.x = x + 5.;
+        camera.position.y = y + 5.;
     }
 }
 
@@ -120,9 +163,7 @@ impl ecs::Component for PreviewMarker {
     type Storage = ecs::NullStorage<PreviewMarker>;
 }
 
-struct CreateBox{
-    preview: ecs::Entity
-}
+struct CreateBox;
 
 impl ecs::System<()> for CreateBox {
     fn run(&mut self, arg: ecs::RunArg, _: ()) {
@@ -157,20 +198,10 @@ impl ecs::System<()> for CreateBox {
                 grid.extend(Some((rect, eid)));
 
                 trans.insert(eid, transform::Transform{
-                    translate: Vector3::new(
-                        x as f32 / 8. + 1. / 16.,
-                        y as f32 / 8. + 1. / 16.,
-                        p.z
-                    )
+                    rectangle: rect,
+                    z: p.z
                 });
             }
-            trans.insert(self.preview, transform::Transform{
-                translate: Vector3::new(
-                    x as f32 / 8. + 1. / 16.,
-                    y as f32 / 8. + 1. / 16.,
-                    p.z
-                )
-            });
         }
     }
 }
