@@ -16,10 +16,7 @@ gfx_window_glutin="0.11"
 glutin="0.5"
 genmesh="0.4"
 collision="0.6"
-
-[dependencies.specs]
-git="https://github.com/csherratt/parsec"
-rev="5e849499"
+specs="0.7"
 
 [dependencies.technobabble-rtree]
 git="https://github.com/csherratt/technobabble-rtree"

@@ -23,6 +23,7 @@ use glutin::VirtualKeyCode as Key;
 use cgmath::Vector3;
 use collision::{Plane, Intersect};
 use rtree::{RTree, Rectangle, Point};
+use ecs::Join;
 
 
 const SCALE: f32 = 0.1;
@@ -49,7 +50,9 @@ fn main() {
     let mut world = ecs::World::new();
     world.register::<transform::Transform>();
     world.register::<PreviewMarker>();
+    world.register::<BulletMarker>();
     world.register::<movement::Movement>();
+    world.register::<Decay>();
 
     let builder = glutin::WindowBuilder::new()
         .with_title("Technobabble".to_string())
@@ -76,16 +79,19 @@ fn main() {
 
     let mut sim = ecs::Planner::<()>::new(world, 4);
     sim.add_system(InputHandler, "Input Handler", 16);
-    sim.add_system(CreateBox, "Create box", 15);
+    sim.add_system(ShootShit, "Create box", 15);
     sim.add_system(movement::System, "movement", 14);
     sim.add_system(CameraSystem, "Camera System", 13);
+    sim.add_system(DecaySystem, "DecaySystem System", 12);
 
-    while step(&sim.world, &window) {
+    while step(sim.mut_world(), &window) {
         sim.dispatch(());
 
-        let camera = sim.world.read_resource::<camera::Camera>();
+        let camera = {
+            *sim.mut_world().read_resource::<camera::Camera>()
+        };
         renderer.resize(&window);
-        renderer.render(*camera, &sim.world);
+        renderer.render(camera, sim.mut_world());
         window.swap_buffers().unwrap();
     }
 }
@@ -163,44 +169,88 @@ impl ecs::Component for PreviewMarker {
     type Storage = ecs::NullStorage<PreviewMarker>;
 }
 
-struct CreateBox;
+#[derive(Clone, Default)]
+pub struct BulletMarker;
+impl ecs::Component for BulletMarker {
+    type Storage = ecs::NullStorage<BulletMarker>;
+}
 
-impl ecs::System<()> for CreateBox {
+struct ShootShit;
+
+impl ecs::System<()> for ShootShit {
     fn run(&mut self, arg: ecs::RunArg, _: ()) {
-        let (camera, input, mut grid, mut trans) = arg.fetch(|w| {
+        let (camera, input, player, mut bullet, mut trans, mut mov, mut decay) = arg.fetch(|w| {
             (w.read_resource::<camera::Camera>(),
              w.read_resource::<input::Events>(),
-             w.write_resource::<RTree<ecs::Entity>>(),
-             w.write::<transform::Transform>())
+             w.read_resource::<Player>(),
+             w.write::<BulletMarker>(),
+             w.write::<transform::Transform>(),
+             w.write::<movement::Movement>(),
+             w.write::<Decay>())
         });
 
 
         let ray = camera.pixel_ray(input.mouse_position);
         let plane = Plane::from_abcd(0., 0., 1., 0.);
         if let Some(p) = (plane, ray).intersection() {
-            let x = (p.x * 8.).round() as i16;
-            let y = (p.y * 8.).round() as i16;
+            let x = (p.x * 8.).round() as i32;
+            let y = (p.y * 8.).round() as i32;
 
-            let rect = Rectangle{
-                min: Point{x: x, y: y},
-                max: Point{x: x+1, y: y+1},
-            };
-
-            // check to see if we can!
-            for (&other, _) in grid.query(rect) {
-                if rect.overlaps(other) {
-                    return
-                }
-            }
+            let pos = *trans.get(player.0).unwrap();
+            let (mx, my) = pos.middle();
 
             if input.is_button_down(glutin::MouseButton::Left) {
-                let eid = arg.create();
-                grid.extend(Some((rect, eid)));
+                for x in (x-2)..(x+2) {
+                    for y in (y-2)..(y+2) {
+                        let x = x as f32;
+                        let y = y as f32;
 
-                trans.insert(eid, transform::Transform{
-                    rectangle: rect,
-                    z: p.z
-                });
+                        let eid = arg.create();
+
+                        trans.insert(eid, transform::Transform{
+                            rectangle: pos.rectangle,
+                            z: p.z
+                        });
+                        bullet.insert(eid, BulletMarker);
+
+                        let (dx, dy) = (x - mx, y - my);
+                        let mag = (dx * dx + dy * dy).sqrt();
+
+                        mov.insert(eid, movement::Movement::new(
+                            (x - mx) / mag,
+                            (y - my) / mag
+                        ));
+
+                        decay.insert(eid, Decay(120));
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+/// decay will kill an entity ofer x turns
+#[derive(Clone, Default, Debug)]
+pub struct Decay(u16);
+
+impl ecs::Component for Decay {
+    type Storage = ecs::VecStorage<Decay>;
+}
+
+struct DecaySystem;
+
+impl ecs::System<()> for DecaySystem {
+    fn run(&mut self, arg: ecs::RunArg, _: ()) {
+        let (eids, mut decay) = arg.fetch(|w| {
+            (w.entities(), w.write::<Decay>())
+        });
+
+        for (eid, d) in (&eids, &mut decay).iter() {
+            if d.0 == 0 {
+                arg.delete(eid);
+            } else {
+                d.0 -= 1;
             }
         }
     }
