@@ -5,7 +5,9 @@ use ecs;
 use ecs::Join;
 use rtree::Rectangle;
 pub use self::vector::Vector;
-use transform::Transform;
+use transform::{Transform, Location};
+use Step;
+use super::MovingTo;
 
 impl ecs::Component for Movement {
     type Storage = ecs::VecStorage<Movement>;
@@ -51,14 +53,25 @@ impl Movement {
 
 pub struct System;
 
-impl ecs::System<()> for System {
-    fn run(&mut self, arg: ecs::RunArg, _: ()) {
-        let (mut movement, mut transform) = arg.fetch(|w| {
-            (w.write::<Movement>(), w.write::<Transform>())
+impl ecs::System<Step> for System {
+    fn run(&mut self, arg: ecs::RunArg, step: Step) {
+        let (eids, mut movement, mut location, mut movto) = arg.fetch(|w| {
+            (w.entities(),
+             w.write::<Movement>(),
+             w.write::<Location>(),
+             w.write::<MovingTo>())
         });
 
-        for (mov, trans) in (&mut movement, &mut transform).iter() {
-            trans.rectangle = mov.next(trans.rectangle);
+        if !step.is_game() {
+            return
+        }
+
+        for (loc, mov_to) in (&mut location, &movto).iter() {
+            loc.0 = mov_to.0;
+        }
+
+        for (eid, mov, loc) in (&eids, &mut movement, &location).iter() {
+            movto.insert(eid, MovingTo(mov.next(loc.0)));
         }
     }
 }

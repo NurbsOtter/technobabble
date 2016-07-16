@@ -18,5 +18,8 @@ genmesh="0.4"
 collision="0.6"
 specs="0.7"
 
+[dev-dependencies]
+quickcheck="0.2"
+
 [dependencies.technobabble-rtree]
 git="https://github.com/csherratt/technobabble-rtree"

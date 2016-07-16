@@ -24,9 +24,39 @@ use cgmath::Vector3;
 use collision::{Plane, Intersect};
 use rtree::{RTree, Rectangle, Point};
 use ecs::Join;
-
+pub use transform::MovingTo;
 
 const SCALE: f32 = 0.1;
+
+#[derive(Copy, Clone, Debug)]
+pub enum Step {
+    Game(u64),
+    Render(u64, f32)
+}
+
+impl Step {
+    pub fn is_game(&self) -> bool {
+        if let Step::Game(_) = *self { true } else { false }
+    }
+
+    pub fn is_render(&self) -> bool {
+        if let Step::Render(_, _) = *self { true } else { false }
+    }
+
+    pub fn step(&self) -> u64 {
+        match *self {
+            Step::Game(i) => i,
+            Step::Render(i, _) => i
+        }
+    }
+
+    pub fn fstep(&self) -> f64 {
+        match *self {
+            Step::Game(i) => i as f64,
+            Step::Render(i, off) => i as f64 + off as f64
+        }
+    }
+}
 
 fn clamp(min: f32, value: f32, max: f32) -> f32 {
     if min > value {
@@ -49,10 +79,13 @@ struct Player(ecs::Entity);
 fn main() {
     let mut world = ecs::World::new();
     world.register::<transform::Transform>();
+    world.register::<transform::Location>();
+    world.register::<transform::MovingTo>();
     world.register::<PreviewMarker>();
     world.register::<BulletMarker>();
     world.register::<movement::Movement>();
     world.register::<Decay>();
+
 
     let builder = glutin::WindowBuilder::new()
         .with_title("Technobabble".to_string())
@@ -62,12 +95,14 @@ fn main() {
     let eid = world.create_now()
                    .with(PreviewMarker)
                    .with(movement::Movement::new(0., 0.))
-                   .with(transform::Transform{
-                        rectangle: rtree::Rectangle{
+                   .with(transform::Location(
+                        rtree::Rectangle{
                             min: Point{x: -1, y: -1},
                             max: Point{x:  1, y:  1}
-                        },
-                        z: 0.,
+                        }
+                   ))
+                   .with(transform::Transform{
+                        x: 0., y: 0., z: 0.
                    })
                    .build();
 
@@ -77,15 +112,25 @@ fn main() {
     world.add_resource(RTree::<ecs::Entity>::new());
     world.add_resource(Player(eid));
 
-    let mut sim = ecs::Planner::<()>::new(world, 4);
+    let mut sim = ecs::Planner::<Step>::new(world, 4);
     sim.add_system(InputHandler, "Input Handler", 16);
     sim.add_system(ShootShit, "Create box", 15);
-    sim.add_system(movement::System, "movement", 14);
+    sim.add_system(movement::System, "Movement", 14);
     sim.add_system(CameraSystem, "Camera System", 13);
-    sim.add_system(DecaySystem, "DecaySystem System", 12);
+    sim.add_system(DecaySystem, "Decay System", 12);
+    sim.add_system(transform::LocationToTransform, "Location Sync", 11);
 
+    let start = std::time::SystemTime::now();
+    let mut index = 0;
     while step(sim.mut_world(), &window) {
-        sim.dispatch(());
+        let now = std::time::SystemTime::now();
+        let delta = now.duration_since(start).unwrap();
+        let delta = (delta.as_secs() as f64 + delta.subsec_nanos() as f64 / 1e9) * 20.;
+        while delta.trunc() as u64 - index > 0 {
+            index += 1;
+            sim.dispatch(Step::Game(index));
+        }
+        sim.dispatch(Step::Render(index, delta.fract() as f32));
 
         let camera = {
             *sim.mut_world().read_resource::<camera::Camera>()
@@ -98,14 +143,18 @@ fn main() {
 
 struct InputHandler;
 
-impl ecs::System<()> for InputHandler {
-    fn run(&mut self, arg: ecs::RunArg, _: ()) {
+impl ecs::System<Step> for InputHandler {
+    fn run(&mut self, arg: ecs::RunArg, step: Step) {
         let (mut camera, input, player, mut mov) = arg.fetch(|w| {
             (w.write_resource::<camera::Camera>(),
              w.read_resource::<input::Events>(),
              w.read_resource::<Player>(),
              w.write::<movement::Movement>())
         });
+
+        if !step.is_game() {
+            return
+        }
 
         camera.position = camera.position + match (input.is_key_down(Key::Equals), input.is_key_down(Key::Subtract)) {
             (true, false) => Vector3::new(0., 0., -1.),
@@ -148,18 +197,21 @@ impl ecs::System<()> for InputHandler {
 
 struct CameraSystem;
 
-impl ecs::System<()> for CameraSystem {
-    fn run(&mut self, arg: ecs::RunArg, _: ()) {
+impl ecs::System<Step> for CameraSystem {
+    fn run(&mut self, arg: ecs::RunArg, step: Step) {
         let (mut camera, player, transform) = arg.fetch(|w| {
             (w.write_resource::<camera::Camera>(),
              w.read_resource::<Player>(),
              w.read::<transform::Transform>())
         });
 
+        if !step.is_render() {
+            return
+        }
+
         let transform = transform.get(player.0).unwrap();
-        let (x, y) = transform.middle();
-        camera.position.x = x + 5.;
-        camera.position.y = y + 5.;
+        camera.position.x = transform.x + 5.;
+        camera.position.y = transform.y + 5.;
     }
 }
 
@@ -177,18 +229,21 @@ impl ecs::Component for BulletMarker {
 
 struct ShootShit;
 
-impl ecs::System<()> for ShootShit {
-    fn run(&mut self, arg: ecs::RunArg, _: ()) {
+impl ecs::System<Step> for ShootShit {
+    fn run(&mut self, arg: ecs::RunArg, step: Step) {
         let (camera, input, player, mut bullet, mut trans, mut mov, mut decay) = arg.fetch(|w| {
             (w.read_resource::<camera::Camera>(),
              w.read_resource::<input::Events>(),
              w.read_resource::<Player>(),
              w.write::<BulletMarker>(),
-             w.write::<transform::Transform>(),
+             w.write::<transform::Location>(),
              w.write::<movement::Movement>(),
              w.write::<Decay>())
         });
 
+        if !step.is_game() {
+            return
+        }
 
         let ray = camera.pixel_ray(input.mouse_position);
         let plane = Plane::from_abcd(0., 0., 1., 0.);
@@ -207,21 +262,18 @@ impl ecs::System<()> for ShootShit {
 
                         let eid = arg.create();
 
-                        trans.insert(eid, transform::Transform{
-                            rectangle: pos.rectangle,
-                            z: p.z
-                        });
+                        trans.insert(eid, transform::Location(pos.0));
                         bullet.insert(eid, BulletMarker);
 
                         let (dx, dy) = (x - mx, y - my);
                         let mag = (dx * dx + dy * dy).sqrt();
 
                         mov.insert(eid, movement::Movement::new(
-                            (x - mx) / mag,
-                            (y - my) / mag
+                            4. * (x - mx) / mag,
+                            4. * (y - my) / mag
                         ));
 
-                        decay.insert(eid, Decay(120));
+                        decay.insert(eid, Decay(60));
                     }
                 }
             }
@@ -240,11 +292,16 @@ impl ecs::Component for Decay {
 
 struct DecaySystem;
 
-impl ecs::System<()> for DecaySystem {
-    fn run(&mut self, arg: ecs::RunArg, _: ()) {
+impl ecs::System<Step> for DecaySystem {
+    fn run(&mut self, arg: ecs::RunArg, step: Step) {
         let (eids, mut decay) = arg.fetch(|w| {
             (w.entities(), w.write::<Decay>())
         });
+
+
+        if !step.is_game() {
+            return
+        }
 
         for (eid, d) in (&eids, &mut decay).iter() {
             if d.0 == 0 {
